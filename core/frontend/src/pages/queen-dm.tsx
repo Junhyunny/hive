@@ -14,6 +14,7 @@ import { usePendingQueue } from "@/hooks/use-pending-queue";
 import type { AgentEvent, HistorySession } from "@/api/types";
 import {
   newReplayState,
+  newTokenAccumulator,
   replayEvent,
   replayEventsToMessages,
 } from "@/lib/chat-helpers";
@@ -196,32 +197,25 @@ export default function QueenDM() {
 
         // Use the stateful replay so tool_status pills are synthesized
         // the same way the live SSE handler does — without this the
-        // refreshed queen DM shows zero tool activity.
+        // refreshed queen DM shows zero tool activity. The token
+        // accumulator folds the llm_turn_complete sum into the same
+        // pass so we don't iterate the (potentially large) event array
+        // twice. SSE does not replay llm_turn_complete (see
+        // routes_events.py _REPLAY_TYPES), so no double-count risk —
+        // live SSE deltas that may have already landed are kept via the
+        // functional merge below.
         const replayState = newReplayState();
+        const seed = newTokenAccumulator();
         const restored = replayEventsToMessages(
           events,
           "queen-dm",
           queenName,
           undefined,
           replayState,
+          seed,
         );
         replayStateRef.current = replayState;
 
-        // Sum historical llm_turn_complete events so Tokens/Cost carry over
-        // across resume. SSE does not replay llm_turn_complete (see
-        // routes_events.py _REPLAY_TYPES), so no double-count risk — live
-        // SSE deltas that may have already landed are kept via functional
-        // merge below.
-        const seed = { input: 0, output: 0, cached: 0, cacheCreated: 0, costUsd: 0 };
-        for (const evt of events) {
-          if (evt.type !== "llm_turn_complete" || !evt.data) continue;
-          const d = evt.data as Record<string, unknown>;
-          seed.input += (d.input_tokens as number) || 0;
-          seed.output += (d.output_tokens as number) || 0;
-          seed.cached += (d.cached_tokens as number) || 0;
-          seed.cacheCreated += (d.cache_creation_tokens as number) || 0;
-          seed.costUsd += (d.cost_usd as number) || 0;
-        }
         if (!cancelled()) {
           setTokenUsage((prev) => ({
             input: prev.input + seed.input,

@@ -486,10 +486,18 @@ class ColonyRuntime:
         if colony_name:
             colony_home = COLONIES_DIR / colony_name
             colony_overrides_path = colony_home / "skills_overrides.json"
-            # Colony-scope SKILL.md dir is the project-scope from discovery's
-            # point of view (colony_dir is the project_root). Add it also as
-            # a tagged ``colony_ui`` scope so UI-created entries resolve with
-            # correct provenance.
+            # Surface both the new flat ``skills/`` (where new skills are
+            # written) and the legacy nested ``.hive/skills/`` (left intact
+            # for pre-flatten colonies) as tagged ``colony_ui`` scopes, so
+            # UI-created entries resolve with correct provenance regardless
+            # of which on-disk layout the colony has.
+            extras.append(
+                ExtraScope(
+                    directory=colony_home / "skills",
+                    label="colony_ui",
+                    priority=3,
+                )
+            )
             extras.append(
                 ExtraScope(
                     directory=colony_home / ".hive" / "skills",

@@ -1503,6 +1503,7 @@ class AgentLoader:
         from framework.pipeline.stages.mcp_registry import McpRegistryStage
         from framework.pipeline.stages.skill_registry import SkillRegistryStage
         from framework.skills.config import SkillsConfig
+        from framework.skills.discovery import ExtraScope
 
         configure_logging(level="INFO", format="auto")
 
@@ -1545,6 +1546,19 @@ class AgentLoader:
                     default_skills=getattr(self, "_agent_default_skills", None),
                     skills=getattr(self, "_agent_skills", None),
                 ),
+                # Surface the colony's flat ``skills/`` directory as a
+                # ``colony_ui`` extra scope so SKILL.md files written there
+                # by ``create_colony`` (or the HTTP routes) are picked up
+                # with correct provenance. The legacy nested
+                # ``<colony>/.hive/skills/`` path is still picked up via
+                # project-scope auto-discovery (project_root above).
+                extra_scope_dirs=[
+                    ExtraScope(
+                        directory=self.agent_path / "skills",
+                        label="colony_ui",
+                        priority=3,
+                    )
+                ],
             ),
         ]
 

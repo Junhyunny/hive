@@ -282,6 +282,26 @@ export function newReplayState(): ReplayState {
   };
 }
 
+/**
+ * Token / cost accumulator for cold-restore.
+ *
+ * Folded into ``replayEventsToMessages`` so callers don't need a second
+ * pass over the event array just to sum ``llm_turn_complete`` payloads.
+ * The accumulator object is mutated in place — pass a fresh one in,
+ * read its fields out after the call.
+ */
+export interface TokenAccumulator {
+  input: number;
+  output: number;
+  cached: number;
+  cacheCreated: number;
+  costUsd: number;
+}
+
+export function newTokenAccumulator(): TokenAccumulator {
+  return { input: 0, output: 0, cached: 0, cacheCreated: 0, costUsd: 0 };
+}
+
 function toolLookupKey(
   streamId: string,
   executionId: string | null | undefined,
@@ -470,6 +490,7 @@ export function replayEventsToMessages(
   agentDisplayName: string | undefined,
   queenDisplayName?: string,
   state: ReplayState = newReplayState(),
+  tokenAccumulator?: TokenAccumulator,
 ): ChatMessage[] {
   // Upsert by id — later emissions for the same pill replace earlier ones.
   const byId = new Map<string, ChatMessage>();
@@ -482,6 +503,18 @@ export function replayEventsToMessages(
   const inheritedIds = new Set<string>();
 
   for (const evt of events) {
+    // Fold the token-usage sum into this same loop so cold-restore
+    // doesn't need a second pass over the event array. SSE does not
+    // replay llm_turn_complete (see routes_events.py _REPLAY_TYPES) so
+    // there's no double-count risk against later live updates.
+    if (tokenAccumulator && evt.type === "llm_turn_complete" && evt.data) {
+      const d = evt.data as Record<string, unknown>;
+      tokenAccumulator.input += (d.input_tokens as number) || 0;
+      tokenAccumulator.output += (d.output_tokens as number) || 0;
+      tokenAccumulator.cached += (d.cached_tokens as number) || 0;
+      tokenAccumulator.cacheCreated += (d.cache_creation_tokens as number) || 0;
+      tokenAccumulator.costUsd += (d.cost_usd as number) || 0;
+    }
     if (evt.type === "colony_fork_marker") {
       if (markerEvent === null) {
         markerEvent = evt;

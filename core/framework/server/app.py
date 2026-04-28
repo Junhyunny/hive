@@ -335,6 +335,18 @@ def create_app(model: str | None = None) -> web.Application:
         queen_tool_registry=None,
     )
 
+    # Clear orphaned compaction markers from prior server crashes. Without
+    # this, any session whose compaction was interrupted would block the
+    # next colony cold-load for the full await_completion timeout (180s)
+    # before falling through. See compaction_status.sweep_stale_in_progress.
+    try:
+        from framework.config import QUEENS_DIR
+        from framework.server import compaction_status
+
+        compaction_status.sweep_stale_in_progress(QUEENS_DIR)
+    except Exception:
+        logger.debug("compaction_status: startup sweep skipped", exc_info=True)
+
     # Register shutdown hook
     app.on_shutdown.append(_on_shutdown)
 

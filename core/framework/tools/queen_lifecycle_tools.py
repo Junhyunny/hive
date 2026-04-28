@@ -1532,10 +1532,10 @@ def register_queen_lifecycle_tools(
     # the skill content INLINE as tool arguments (skill_name,
     # skill_description, skill_body, and optional skill_files for
     # supporting scripts/references). The tool materializes the skill
-    # folder under ``~/.hive/colonies/{colony_name}/.hive/skills/{name}/``
-    # itself — colony-scoped, discovered as project scope by the
-    # colony's worker and invisible to every other colony on the
-    # machine — then forks.
+    # folder under ``~/.hive/colonies/{colony_name}/skills/{name}/``
+    # itself — colony-scoped (surfaced as ``colony_ui`` to that
+    # colony's workers, invisible to every other colony on the
+    # machine) — then forks.
     #
     # Why inline instead of a pre-authored folder path: earlier versions
     # required the queen to write SKILL.md with her own write_file tool
@@ -1653,7 +1653,7 @@ def register_queen_lifecycle_tools(
         The queen passes skill content inline: ``skill_name``,
         ``skill_description``, ``skill_body``, and optional
         ``skill_files`` (supporting scripts/references). The tool
-        writes ``~/.hive/colonies/{colony_name}/.hive/skills/{skill_name}/``
+        writes ``~/.hive/colonies/{colony_name}/skills/{skill_name}/``
         (colony-scoped, only this colony's workers see it), then forks
         the queen session into that colony directory and stores the
         task in ``worker.json``. NOTHING RUNS after fork.
@@ -1739,7 +1739,7 @@ def register_queen_lifecycle_tools(
 
         installed_skill, write_err, skill_replaced = write_skill(
             draft,
-            target_root=colony_dir / ".hive" / "skills",
+            target_root=colony_dir / "skills",
             replace_existing=True,
         )
         if write_err is not None or installed_skill is None:
@@ -1803,9 +1803,9 @@ def register_queen_lifecycle_tools(
         # Fork the queen session into the colony directory. The fork
         # copies conversations + writes worker.json + metadata.json.
         # NO worker runs after this call. The new colony's worker
-        # inherits ~/.hive/skills/ on first run (whenever the user
-        # actually starts it), so the freshly installed skill is
-        # discoverable then.
+        # picks up its colony-scoped ``skills/`` directory (where we
+        # just wrote the skill) on first run via the ``colony_ui``
+        # extra scope, plus the usual user-scope ~/.hive/skills/.
         try:
             from framework.server.routes_execution import fork_session_into_colony
         except Exception as e:
@@ -1965,8 +1965,8 @@ def register_queen_lifecycle_tools(
             "ATOMIC CALL: you pass the skill content INLINE as "
             "arguments (skill_name, skill_description, skill_body, "
             "optional skill_files). The tool writes the folder at "
-            "~/.hive/colonies/{colony_name}/.hive/skills/{skill_name}/ "
-            "— scoped to THIS colony only (project scope); no other "
+            "~/.hive/colonies/{colony_name}/skills/{skill_name}/ "
+            "— scoped to THIS colony only; no other "
             "colony on the machine can see it. Do NOT write the folder "
             "yourself with write_file; folders hand-authored at "
             "~/.hive/skills/ are user-scoped and LEAK to every colony. "
@@ -1979,7 +1979,8 @@ def register_queen_lifecycle_tools(
             "worker.json. No worker is started. The user navigates to "
             "the new colony when they're ready (or wires up a "
             "trigger); at that point the worker reads the task from "
-            "worker.json and the skill from ~/.hive/skills/, and "
+            "worker.json and the skill from "
+            "~/.hive/colonies/{colony_name}/skills/, and "
             "starts informed instead of clueless.\n\n"
             "WHY THE SKILL IS REQUIRED: a fresh worker running "
             "unattended has zero memory of your chat with the user. "
